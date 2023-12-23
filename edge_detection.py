@@ -17,8 +17,8 @@ def canny_edge_detection(frame):
 	return blurred, edges
 
 
-	# Open the default webcam 
-cap = cv2.VideoCapture(0) 
+# 	# Open the default webcam
+# cap = cv2.VideoCapture(0)
 
     ## now we need to remove all the horizonatal edges and keep only vertical edge 
 
@@ -33,51 +33,60 @@ def extract_vertical_edges(edges):
         for line in lines:
             x1, y1, x2, y2 = line[0]
             angle = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
-            if np.abs(angle) < 45:  # Consider lines with an angle less than 45 degrees as vertical
+            if np.abs(angle) > 80:  # Consider lines with an angle more than 45 degrees as vertical
                 cv2.line(vertical_mask, (x1, y1), (x2, y2), 255, 2)
 
     # Bitwise AND operation to extract vertical edges
-    horizontal_edges = cv2.bitwise_and(edges, vertical_mask)
+    vertical_edges = cv2.bitwise_and(edges, vertical_mask)
 
-    return horizontal_edges
+    return vertical_edges
 
 # check if the dislodgement is there or not, the principle is that all the edges should lie between the upper and lower bound
-def dislodgement(horizontal_edges, upper_bound, lower_bound):
-    # Calculate the sum of pixel values along the vertical axis
-    vertical_projection = np.sum(horizontal_edges, axis=0)
 
-    # Check if any value in the vertical projection is outside the specified bounds
-    dislodged = any(value < lower_bound or value > upper_bound for value in vertical_projection)
+def dislodgement(vertical_edges, left_bound_x, right_bound_x, window_height):
+    # Extract the specified window from the vertical edges
+    window = vertical_edges[:window_height, left_bound_x:right_bound_x]
+
+    # Calculate the sum of pixel values along the horizontal axis
+    horizontal_projection = np.sum(window, axis=1)
+
+    # Check if any value in the horizontal projection is outside the specified bounds
+    dislodged = any(value > 0 for value in horizontal_projection)
 
     return dislodged
 
-while True: 
-    # Read a frame from the webcam 
-    ret, frame = cap.read() 
-    if not ret: 
-        print('Image not captured') 
+
+
+capture = cv2.VideoCapture(0)
+window_height = 600  # Set your window height
+while True:
+    ret, frame = capture.read()
+    if not ret:
         break
-    
-    # Perform Canny edge detection on the frame 
-    blurred, edges = canny_edge_detection(frame) 
-    vertical_edges=extract_vertical_edges(edges)
+    blurred_frame, edges = canny_edge_detection(frame)
+    vertical_edges = extract_vertical_edges(edges)
+
+    left_bound_x = 100  # Set your left bound x-coordinate
+    right_bound_x = 600  # Set your right bound x-coordinate
+    is_dislodged = dislodgement(vertical_edges, left_bound_x, right_bound_x, window_height)
 
 
-    # Display the original frame and the edge-detected frame 
-    #cv2.imshow("Original", frame) 
-    cv2.imshow("Blurred", blurred) 
-    cv2.imshow("Edges", edges) 
-    # Display the veritcal edges
-    cv2.imshow("Vertical Edges",vertical_edges)
+    cv2.imshow('Edges', edges)
+    cv2.imshow('Vertical Edges', vertical_edges)
+    cv2.line(frame,(left_bound_x,0),(left_bound_x,window_height),(0,255,0),4) # draws the left_bound
+    cv2.line(frame, (right_bound_x, 0), (right_bound_x,window_height), (0,255,0), 4) # draws the right_bound
 
 
-    # Exit the loop when 'q' key is pressed 
-    if cv2.waitKey(1) & 0xFF == ord('q'): 
+    if is_dislodged:
+        cv2.putText(frame,"Belt is stable.",(10,50),cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0))
+        print("Belt is stable.")
+    else:
+        cv2.putText(frame,"Dislodgement detected!!",(10,50),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255))
+        print("Dislodgement detected!!")
+
+    cv2.imshow('Original Frame', frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-
-
-# Release the webcam and close the windows 
-cap.release() 
+capture.release()
 cv2.destroyAllWindows()
-
-
